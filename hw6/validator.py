@@ -1,12 +1,11 @@
-# validator.py (Corrected Indentation & Logic v13 - FINALLY Fixed SyntaxError in str_to_floor)
 import re
 import math
 from collections import defaultdict, deque
 
 # --- HW6 Constants ---
 MOVE_TIME_DEFAULT = 0.4
-DOOR_TIME = 0.4 # Min time door must stay open (normal)
-EPSILON = 0.001 # Tolerance for float comparisons
+DOOR_TIME = 0.4
+EPSILON = 0.001
 MAX_CAPACITY = 6
 FLOOR_MIN = -4
 FLOOR_MAX = 7
@@ -17,19 +16,19 @@ SCHE_MAX_RESPONSE_TIME = 6.0 # SCHE-ACCEPT 到 SCHE-END 最大允许时间
 SCHE_TARGET_FLOORS_SET = {-2, -1, 1, 2, 3, 4, 5} # SCHE 允许的目标楼层
 SCHE_VALID_SPEEDS = {0.2, 0.3, 0.4, 0.5} # 指导书指定的速度
 
-# --- State Enums/Constants ---
+
 DOOR_CLOSED = 0; DOOR_OPEN = 1
 PASSENGER_WAITING = 0; PASSENGER_INSIDE = 1; PASSENGER_ARRIVED = 2
 ELEVATOR_IDLE = 0; ELEVATOR_SCHEDULING_PENDING = 1; ELEVATOR_SCHEDULING_ACTIVE = 2
 
-# --- Helper Functions ---
+
 def str_to_floor(floor_str):
     if not isinstance(floor_str, str) or not floor_str: return None
     prefix = floor_str[0]
-    # --- CORRECTED SYNTAX (v13 - Really fixed this time!) ---
+
     try:
         num = int(floor_str[1:])
-    # --- END CORRECTION ---
+
     except (ValueError, IndexError):
         return None
 
@@ -48,7 +47,7 @@ def floor_to_str(floor):
     if floor_int > 0 and floor_int <= FLOOR_MAX: return f"F{floor_int}"
     return f"InvalidFloor({floor_int})"
 
-# --- State Classes (HW6) ---
+
 class PassengerState:
     def __init__(self, id, priority, from_fl, to_fl, req_time):
         self.id=id; self.priority=priority; self.from_floor=from_fl; self.to_floor=to_fl;
@@ -79,7 +78,7 @@ class ElevatorState:
         return (f"E{self.id}(@{fl} D:{ds} S:{spd} St:{ss} "
                 f"In:{ps} Rcv:{rps} FinT:{self.last_action_finish_time:.2f})")
 
-# --- Validator Class (HW6 Corrected v13) ---
+
 class OutputValidator:
     def __init__(self, stdin_file):
         self.errors = []; self.events = []; self.passengers = {}
@@ -94,7 +93,7 @@ class OutputValidator:
         if not self.errors or self.errors[-1] != full_message: self.errors.append(full_message)
 
     def parse_stdin(self, filename):
-        # (No changes needed here)
+
         try:
             with open(filename, 'r', encoding='utf-8') as f:
                 for line_num, line in enumerate(f, 1):
@@ -139,7 +138,6 @@ class OutputValidator:
 
     def parse_output_line(self, line):
         """Parses a single line of HW6 output (Corrected timestamp/content extraction v7)."""
-        # (No changes from v11)
         line = line.strip();
         if not line: return None
         ts_match = re.match(r"\[\s*(\d+\.\d+)\s*\]", line)
@@ -164,9 +162,8 @@ class OutputValidator:
             elif m := re.fullmatch(r"SCHE-ACCEPT-(\d+)-(\d+\.\d+)-([BF]\d+)", content): event_type = "SCHE-ACCEPT"; g = m.groups(); eid = int(g[0]); spd = float(g[1]); tfl = str_to_floor(g[2]);
             else: m = None # No match
 
-            if m: # If any pattern matched
-                 g = m.groups() # Get groups again safely
-                 # Basic validation and structure creation
+            if m:
+                 g = m.groups()
                  if event_type == "RECEIVE":
                      if pid not in self.passengers or not(1<=eid<=ELEVATOR_COUNT): raise ValueError("Invalid RECEIVE args")
                      parsed_event = {"type": event_type, "time": t, "person_id": pid, "elevator_id": eid}
@@ -204,7 +201,7 @@ class OutputValidator:
         if event is None: return False
         etype=event["type"]; t=event["time"]; eid=event.get("elevator_id")
 
-        # Simplified Static Check remains
+
         is_static_at_event_start = False
         if eid and eid in self.elevators:
              is_static_at_event_start = (t >= self.elevators[eid].last_action_finish_time - EPSILON)
@@ -225,7 +222,6 @@ class OutputValidator:
         is_sche_p=(el.scheduling_state==ELEVATOR_SCHEDULING_PENDING); is_sche_a=(el.scheduling_state==ELEVATOR_SCHEDULING_ACTIVE)
 
         try:
-            # --- RECEIVE (Forbidden only during ACTIVE) ---
             if etype == "RECEIVE":
                 if is_sche_a: self.add_error(f"RECEIVE-{pid}-{eid} during SCHE ACTIVE",t)
                 if p is None: return False
@@ -235,7 +231,7 @@ class OutputValidator:
                      else: self.add_error(f"Duplicate RECEIVE-{pid}-{eid} without cancellation", t)
                 p.received_by_elevator = eid; el.received_passengers.add(pid); return True
 
-            # --- ARRIVE (Allowed during ACTIVE) ---
+
             elif etype == "ARRIVE":
                 self.power_arrive += 1;
                 if floor is None: return False
@@ -251,7 +247,6 @@ class OutputValidator:
                     self.add_error(f"E{eid} moved (ARRIVE {fl_str}) while seemingly idle/empty",t)
                 el.current_floor = floor; el.action_completed(t); return True
 
-            # --- OPEN (Forbidden during ACTIVE unless at target) ---
             elif etype == "OPEN":
                 self.power_open += 1; floor = event["floor"]
                 is_at_sche_target = is_sche_a and floor == el.schedule_info.get('target_floor')
@@ -261,7 +256,6 @@ class OutputValidator:
                 if t < el.last_action_finish_time - EPSILON*10: self.add_error(f"E{eid} OPEN @{fl_str} too early T:{t:.4f}<PrevFin:{el.last_action_finish_time:.4f}",t)
                 el.door_state = DOOR_OPEN; el.action_completed(t); return True
 
-            # --- CLOSE (Forbidden during ACTIVE unless at target) ---
             elif etype == "CLOSE":
                 self.power_close += 1; floor = event["floor"]
                 is_at_sche_target = is_sche_a and floor == el.schedule_info.get('target_floor')
@@ -281,7 +275,6 @@ class OutputValidator:
                     if dur < min_dur - EPSILON*10: mode = "SCHE" if is_at_sche_target else "norm"; self.add_error(f"E{eid} door open @{fl_str} too short ({mode}):{dur:.4f}s<{min_dur:.1f}s (OpenT:{open_t:.4f})",t)
                 el.door_state = DOOR_CLOSED; el.action_completed(t); return True
 
-            # --- IN (Forbidden only during ACTIVE) ---
             elif etype == "IN":
                 floor = event["floor"]; pid = event["person_id"]; p = self.passengers.get(pid)
                 if floor is None or p is None: return False
@@ -298,20 +291,15 @@ class OutputValidator:
                 else: self.add_error(f"P{pid} IN E{eid} but already inside", t)
                 return True
 
-            # --- OUT Validation (Corrected OUT-F check) ---
             elif etype == "OUT":
                 succ = event["success"]; floor = event["floor"]; pid = event["person_id"]; p = self.passengers.get(pid)
                 if floor is None or p is None: return False
-                # OUT-F IS allowed even if not SCHE target floor, if doors happen to open (though opening might be invalid)
-                # is_at_sche_target = is_sche_a and floor == el.schedule_info.get('target_floor')
                 if el.door_state != DOOR_OPEN: self.add_error(f"P{pid} OUT E{eid} @{fl_str} door not O ({ds_str})",t)
                 if floor != el.current_floor: self.add_error(f"P{pid} OUT E{eid} @ wrong floor {fl_str} (E@ {floor_to_str(el.current_floor)})",t)
                 if p.state != PASSENGER_INSIDE or p.current_elevator != eid: self.add_error(f"P{pid} OUT E{eid} @{fl_str} but not INSIDE this E (st={p.state}, curE={p.current_elevator})",t)
                 is_dest = (floor == p.to_floor)
                 if succ and not is_dest: self.add_error(f"OUT-S P{pid} E{eid} @{fl_str} but not Dest ({floor_to_str(p.to_floor)})",t)
                 if not succ and is_dest: self.add_error(f"OUT-F P{pid} E{eid} @ Dest {fl_str}. Should be OUT-S",t)
-                # --- CORRECTED: Removed invalid OUT-F location check ---
-                # if not succ and not is_at_sche_target: self.add_error(f"OUT-F P{pid} E{eid} @{fl_str} outside SCHE target arrival",t)
                 p.current_elevator = -1; p.current_location = floor
                 if pid in el.passengers: el.passengers.remove(pid)
                 if succ: p.state = PASSENGER_ARRIVED; p.finish_time = t
@@ -320,7 +308,6 @@ class OutputValidator:
                 if pid in el.received_passengers: el.received_passengers.remove(pid)
                 return True
 
-            # --- SCHE-BEGIN Validation (Corrected Static Check & RECEIVE Cancel Logic) ---
             elif etype == "SCHE-BEGIN":
                 if not is_sche_p: self.add_error(f"SCHE-BEGIN E{eid} but not PENDING (state={el.scheduling_state})",t); return False
                 s_info = el.schedule_info
@@ -328,12 +315,11 @@ class OutputValidator:
                 if el.door_state != DOOR_CLOSED: self.add_error(f"SCHE-BEGIN E{eid} door not C",t)
                 if t < el.last_action_finish_time - EPSILON:
                      self.add_error(f"SCHE-BEGIN E{eid} while previous action not finished (T:{t:.4f} < PrevFin:{el.last_action_finish_time:.4f})",t)
-
                 el.scheduling_state = ELEVATOR_SCHEDULING_ACTIVE
                 el.current_speed = s_info.get('speed', MOVE_TIME_DEFAULT)
                 el.schedule_info['begin_time'] = t
 
-                # --- Explicitly Cancel RECEIVEs ---
+
                 cancelled_passenger_ids = list(el.received_passengers)
                 for rpid in cancelled_passenger_ids:
                     rp = self.passengers.get(rpid);
@@ -343,13 +329,10 @@ class OutputValidator:
                 el.received_passengers.clear();
                 return True
 
-            # --- SCHE-END Validation (Corrected State Check) ---
             elif etype == "SCHE-END":
-                # --- CORRECTED State Check: Must be ACTIVE ---
                 if not is_sche_a:
                      self.add_error(f"SCHE-END E{eid} but not ACTIVE (state={el.scheduling_state})",t);
                      return False
-                # --- End Correction ---
                 s_info = el.schedule_info; t_fl = s_info.get('target_floor')
                 if t_fl is None: self.add_error(f"SCHE-END E{eid}: Internal Error - No target floor found",t)
                 elif el.current_floor != t_fl: self.add_error(f"SCHE-END E{eid} @ wrong floor {floor_to_str(el.current_floor)} (Tgt:{floor_to_str(t_fl)})",t)
@@ -362,7 +345,6 @@ class OutputValidator:
                 else:
                     comp_t = t - acc_t;
                     if comp_t > SCHE_MAX_RESPONSE_TIME + EPSILON*10: self.add_error(f"SCHE E{eid} took too long: {comp_t:.4f}s>{SCHE_MAX_RESPONSE_TIME}s (AccT:{acc_t:.4f})",t)
-
                 if t_fl is not None:
                     fnd_c=False; fnd_o=False; c_t=-1.0; o_t=-1.0; s_idx=len(self.events)-1
                     while s_idx >= 0:
@@ -392,7 +374,7 @@ class OutputValidator:
 
     def validate_output(self, output_lines):
         """Main validation function for HW6."""
-        # Reset state
+
         self.errors = []; self.events = []; self.last_global_time = 0.0
         self.power_arrive = 0; self.power_open = 0; self.power_close = 0; self.total_runtime = 0.0
         for el in self.elevators.values(): el.__init__(el.id)
@@ -412,8 +394,7 @@ class OutputValidator:
             if self.validate_event(event):
                 self.events.append(event)
 
-        # Final State Checks (Removed finish_time < request_time check)
-        print("\n--- Final State Check (HW6 v13) ---") # Update version
+        print("\n--- Final State Check (HW6 v13) ---")
         final_errors = []
         all_p_ok = True
         if self.passengers:
@@ -438,7 +419,6 @@ class OutputValidator:
 
     def calculate_performance(self, real_time):
         """Calculates HW6 performance metrics."""
-        # (No changes from v12)
         t_run = max(real_time, self.total_runtime); wt = 0.0
         tot_wt_t = 0.0; tot_w = 0; finishers = 0
         if self.passengers:

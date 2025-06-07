@@ -3,7 +3,6 @@ import re
 import math
 from collections import defaultdict, deque
 
-# --- HW7 常量 (保持不变) ---
 MOVE_TIME_DEFAULT = 0.4
 DOUBLE_CAR_SPEED = 0.2
 DOOR_TIME = 0.4
@@ -21,14 +20,12 @@ UPDATE_HOLD_TIME = 1.0
 UPDATE_MAX_RESPONSE_TIME = 6.0
 UPDATE_TARGET_FLOORS_SET = {-2, -1, 1, 2, 3, 4, 5}
 
-# --- 状态常量 (保持不变) ---
 DOOR_CLOSED = 0; DOOR_OPEN = 1
 PASSENGER_WAITING = 0; PASSENGER_INSIDE = 1; PASSENGER_ARRIVED = 2
 ELEVATOR_IDLE = 0
 ELEVATOR_SCHEDULING_PENDING = 1; ELEVATOR_SCHEDULING_ACTIVE = 2
 ELEVATOR_UPDATING_PENDING = 3; ELEVATOR_UPDATING_ACTIVE = 4
 
-# --- 辅助函数 (保持不变) ---
 def str_to_floor(floor_str):
     if not isinstance(floor_str, str) or not floor_str: return None
     prefix = floor_str[0]
@@ -47,7 +44,6 @@ def floor_to_str(floor):
     if floor_int > 0 and floor_int <= FLOOR_MAX: return f"F{floor_int}"
     return f"InvalidFloor({floor_int})"
 
-# --- TargetFloorState 类 (保持不变) ---
 class TargetFloorState:
     def __init__(self, floor):
         self.transfer_floor = floor
@@ -61,7 +57,6 @@ class TargetFloorState:
     def release(self, elevator_original_id):
         if self.occupied_by == elevator_original_id: self.occupied_by = None
 
-# --- PassengerState 类 (保持不变) ---
 class PassengerState:
     def __init__(self, id, priority, from_fl, to_fl, req_time):
         self.id=id; self.priority=priority; self.from_floor=from_fl; self.to_floor=to_fl;
@@ -74,7 +69,6 @@ class PassengerState:
         rcv=f"R{self.received_by_elevator}" if self.state==0 and self.received_by_elevator!=-1 else ""
         dest=floor_to_str(self.to_floor); return f"P{self.id}({loc}{el}{rcv}->{dest}@{st})"
 
-# --- ElevatorState 类 (保持不变) ---
 class ElevatorState:
     def __init__(self, id):
         self.id = id; self.original_id = id; self.reset_state()
@@ -96,7 +90,6 @@ class ElevatorState:
         return (f"E{self.original_id}(@{fl} D:{ds} S:{spd} R:{range_s} St:{ss} {dbl}{part}{shft_info} "
                 f"In:{ps} Rcv:{rps} FinT:{self.last_action_finish_time:.2f})")
 
-# --- 更新: 验证器主类 ---
 class OutputValidator:
     def __init__(self, stdin_file):
         self.errors = []; self.events = []; self.passengers = {}
@@ -113,10 +106,8 @@ class OutputValidator:
         if not self.errors or self.errors[-1] != full_message: self.errors.append(full_message)
 
     def parse_stdin(self, filename):
-        # (与 v1.1 相同)
         try:
             with open(filename, 'r', encoding='utf-8') as f:
-                # ... (省略与 v1.1 相同的解析代码) ...
                  for line_num, line in enumerate(f, 1):
                     line = line.strip();
                     if not line: continue
@@ -162,7 +153,6 @@ class OutputValidator:
         self.raw_requests.sort(key=lambda x: x['time'])
 
     def parse_output_line(self, line):
-        # (与 v1.1 相同, 包含 SCHE-ACCEPT 修正)
         line = line.strip();
         if not line: return None
         ts_match = re.match(r"\[\s*(\d+\.\d+)\s*\]", line)
@@ -269,18 +259,14 @@ class OutputValidator:
         el_a = self.elevators.get(e_a_id) if e_a_id else None
         el_b = self.elevators.get(e_b_id) if e_b_id else None
 
-        # --- Pre-checks: Shaft active & Elevator exists ---
         if etype.startswith("UPDATE"):
             if el_a is None or el_b is None: self.add_error(f"{etype} references invalid elevator {e_a_id}/{e_b_id}", t); return False
             if el_a.shaft_id not in self.active_shafts or el_b.shaft_id not in self.active_shafts: self.add_error(f"{etype} involves elevator in inactive shaft",t); return False
             if el_a.is_double_car or el_b.is_double_car: self.add_error(f"{etype} involves already double-car elevator",t); return False
-            # Use el_a and el_b directly for state access
         elif el_state_obj is None: self.add_error(f"Event missing/invalid EID {eid}: {event}", t); return False
         elif el_state_obj.shaft_id not in self.active_shafts: self.add_error(f"{etype} for E{el_state_obj.original_id} in inactive shaft {el_state_obj.shaft_id}",t); return False
-        # Use el_state_obj for state access in non-UPDATE events
         el = el_state_obj
 
-        # Update last event time
         if el: el.last_event_time = t
         if el_a: el_a.last_event_time = t
         if el_b: el_b.last_event_time = t
@@ -288,7 +274,6 @@ class OutputValidator:
         pid=event.get("person_id"); p=self.passengers.get(pid) if pid else None
         floor = event.get("floor")
 
-        # Get current states for easier reading
         state = el.state if el else None
         state_a = el_a.state if el_a else None
         state_b = el_b.state if el_b else None
@@ -357,8 +342,7 @@ class OutputValidator:
                 self.active_shafts.discard(e_a_id); self.target_floor_managers[e_b_id] = TargetFloorState(target_floor)
                 return True
 
-            # --- 修改现有事件验证逻辑 ---
-            if el is None: return False # 确保非 UPDATE 事件有有效的 el 状态对象
+            if el is None: return False
 
             if is_updating or is_scheduling:
                 if etype in ["RECEIVE", "IN"] and state == ELEVATOR_UPDATING_ACTIVE: self.add_error(f"{etype} E{el.original_id} 在 UPDATE ACTIVE 状态",t)
@@ -434,7 +418,7 @@ class OutputValidator:
                       else: self.add_error(f"重复 RECEIVE-{pid}-{el.original_id}", t)
                  p.received_by_elevator = el.original_id; el.received_passengers.add(pid); return True
 
-            elif etype == "IN": # <<< 包含修正后的可达性检查 >>>
+            elif etype == "IN":
                 floor = event["floor"]; pid = event["person_id"]; p = self.passengers.get(pid)
                 if floor is None or p is None or el is None: return False
                 if is_upd_a: self.add_error(f"P{pid} IN E{el.original_id} @{floor_to_str(floor)} 在 UPDATE ACTIVE 状态",t); return False
@@ -446,7 +430,6 @@ class OutputValidator:
                 elif floor != p.current_location: self.add_error(f"P{pid} IN E{el.original_id} @{floor_to_str(floor)}, 但 P 等待在 {floor_to_str(p.current_location)}",t)
                 if p.received_by_elevator != el.original_id: self.add_error(f"P{pid} IN E{el.original_id} @{floor_to_str(floor)}, 但未被其接收 (RcvBy={p.received_by_elevator})",t)
 
-                # --- 修正：可达性检查 ---
                 can_reach_destination_or_transfer = False
                 if el.is_double_car:
                     tf_manager = self.target_floor_managers.get(el.shaft_id)
@@ -457,13 +440,12 @@ class OutputValidator:
                         elif el.min_floor <= transfer_floor <= el.max_floor:
                             can_reach_destination_or_transfer = True
                     else: self.add_error(f"内部错误: E{el.original_id} 双轿厢但无井道 {el.shaft_id} 换乘管理器",t)
-                else: # 非双轿厢
+                else:
                     if el.min_floor <= p.to_floor <= el.max_floor:
                         can_reach_destination_or_transfer = True
 
                 if not can_reach_destination_or_transfer:
                     self.add_error(f"P{pid} IN E{el.original_id} @{floor_to_str(floor)} 但电梯无法将其送达目的地 {floor_to_str(p.to_floor)} 或换乘层 (范围 [{floor_to_str(el.min_floor)}-{floor_to_str(el.max_floor)}])",t)
-                # --- 修正结束 ---
 
                 p.state = PASSENGER_INSIDE; p.current_elevator = el.original_id; p.current_location = -999; p.received_by_elevator = -1
                 if pid in el.received_passengers: el.received_passengers.remove(pid)
@@ -488,7 +470,7 @@ class OutputValidator:
                 if pid in el.received_passengers: el.received_passengers.remove(pid)
                 return True
 
-            elif etype == "SCHE-BEGIN": # <<< 包含修正后的 RECEIVE 取消逻辑 >>>
+            elif etype == "SCHE-BEGIN":
                 if is_updating: self.add_error(f"SCHE-BEGIN E{el.original_id} 在 UPDATING 状态 (state={state})",t); return False
                 if el.is_double_car: self.add_error(f"SCHE-BEGIN E{el.original_id} 该电梯已是双轿厢",t)
                 if not is_sche_p: self.add_error(f"SCHE-BEGIN E{el.original_id} 但非 S_PEND (state={state})",t); return False
@@ -497,14 +479,12 @@ class OutputValidator:
                 if el.door_state != DOOR_CLOSED: self.add_error(f"SCHE-BEGIN E{el.original_id} 门未关",t)
                 if t < el.last_action_finish_time - EPSILON: self.add_error(f"SCHE-BEGIN E{el.original_id} 时未停止",t)
                 el.state = ELEVATOR_SCHEDULING_ACTIVE; el.current_speed = s_info.get('speed', MOVE_TIME_DEFAULT); el.schedule_info['begin_time'] = t
-                # --- 修正: 将对 rp 的操作移入循环 ---
                 cancelled_passenger_ids = list(el.received_passengers)
                 el.received_passengers.clear()
                 for rpid in cancelled_passenger_ids:
                     rp = self.passengers.get(rpid)
                     if rp and rp.received_by_elevator == el.original_id:
                         rp.received_by_elevator = -1
-                # --- 修正结束 ---
                 return True
 
             elif etype == "SCHE-END":
@@ -521,7 +501,6 @@ class OutputValidator:
                 fnd_c=False; fnd_o=False; c_t=-1.0; o_t=-1.0; s_idx=len(self.events)-1
                 while s_idx >= 0:
                     prev=self.events[s_idx];
-                    # 使用 original_id 进行匹配
                     if prev.get('elevator_id')!=el.original_id or prev.get('floor')!=t_fl: s_idx-=1; continue
                     if not fnd_c and prev['type']=='CLOSE': fnd_c=True; c_t=prev['time'];
                     elif fnd_c and not fnd_o and prev['type']=='OPEN':
@@ -534,18 +513,15 @@ class OutputValidator:
                 el.state = ELEVATOR_IDLE; el.current_speed = MOVE_TIME_DEFAULT; el.schedule_info = {};
                 el.action_completed(t); return True
 
-        # --- 内部异常处理 ---
         except Exception as e:
              self.add_error(f"验证事件 {event} 时发生内部错误: {e}",t)
              import traceback; self.add_error(f"Traceback: {traceback.format_exc()}",t); return False
 
-        # --- 未知事件类型 ---
         self.add_error(f"未知的事件类型 '{etype}' 无法验证",t); return False
 
 
     def validate_output(self, output_lines):
-        """HW7 输出验证主函数 (修正状态重置)"""
-        # --- 重置状态 ---
+        """HW7 输出验证主函数 """
         self.errors = []
         self.events = []
         self.last_global_time = 0.0
@@ -556,14 +532,11 @@ class OutputValidator:
         self.active_shafts = set(range(1, ELEVATOR_COUNT + 1))
         self.target_floor_managers = {}
 
-        # --- 关键: 重置每个电梯的状态 ---
         for el in self.elevators.values():
-            el.reset_state() # 确保这个方法是完备的
+            el.reset_state()
 
-        # --- 关键: 重置每个乘客的状态 ---
         for p in self.passengers.values():
             try:
-                # 手动重置所有会被 validate_event 修改的属性
                 p.state = PASSENGER_WAITING
                 p.current_location = p.from_floor
                 p.current_elevator = -1
@@ -571,14 +544,12 @@ class OutputValidator:
                 p.finish_time = -1.0
             except Exception as e_reset_p:
                 self.add_error(f"内部错误: 重置乘客 {p.id} 状态失败: {e_reset_p}")
-                return False # 重置失败则无法继续验证
+                return False
 
-        # (检查输入解析错误和无请求情况)
         if not self.passengers and self.errors: return False
         elif not self.passengers and not output_lines: return True
         elif not self.passengers and output_lines: self.add_error("无请求但有输出"); return False
 
-        # --- 解析和验证事件 ---
         parsed_events_raw = []
         for line in output_lines:
             event = self.parse_output_line(line)
@@ -589,7 +560,6 @@ class OutputValidator:
             if self.validate_event(event):
                 self.events.append(event)
 
-        # --- 最终状态检查 (适配 HW7) ---
         print(f"\n--- 最终状态检查 (HW7 v{self.get_version()}) ---") #<--- 使用版本号
         final_errors = []
         all_p_ok = True
@@ -619,7 +589,7 @@ class OutputValidator:
 
 
     def calculate_performance(self, real_time):
-        """计算 HW7 性能指标 (计算逻辑不变)"""
+        """计算 HW7 性能"""
         t_run = max(real_time, self.total_runtime); wt = 0.0
         tot_wt_t = 0.0; tot_w = 0; finishers = 0
         if self.passengers:
@@ -635,5 +605,4 @@ class OutputValidator:
                  "Arrives": self.power_arrive, "Opens": self.power_open, "Closes": self.power_close }
 
     def get_version(self):
-        # Helper to easily update version in prints
         return "v1.5"

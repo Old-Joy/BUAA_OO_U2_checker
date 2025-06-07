@@ -1,4 +1,3 @@
-# run_test.py (HW7 适配 v1.10 - 捕获内部 Timeout)
 import subprocess
 import time
 import os
@@ -7,14 +6,11 @@ import random
 import shutil
 import concurrent.futures
 import pathlib
-import re
 import traceback
 
-# --- Imports ---
 from generate_data import generate_requests_phased_hw7, ELEVATOR_COUNT, MAX_TOTAL_REQUESTS_MUTUAL, MAX_UPDATE_REQUESTS, MAX_SCHE_REQUESTS_PUBLIC
 from validator import OutputValidator
 
-# --- Colorama 设置 (修正 except 块) ---
 try:
     from colorama import init, Fore, Style
     init(autoreset=True)
@@ -28,7 +24,6 @@ except ImportError:
     Style = DummyStyle()
     USE_COLOR = False
 
-# --- 配置 ---
 BASE_DIR = pathlib.Path(__file__).parent.resolve()
 DATAPUT_EXE = BASE_DIR / "datainput_student_win64.exe"
 JAVA_COMMAND = "java"; JAR_FILE = BASE_DIR / "code.jar"
@@ -37,14 +32,12 @@ STDIN_FILENAME = "stdin.txt"; TIMEOUT_SECONDS_PUBLIC = 180 # 使用调整后的�
 TIMEOUT_SECONDS_MUTUAL = 220; MAX_WORKERS = 10
 TEST_SUBDIR_PREFIX = "test_run_"; RESULTS_DIR_NAME = "test_results_hw7"
 
-# --- 辅助函数 ---
 def print_color(text, color):
     if USE_COLOR:
         print(color + text + Style.RESET_ALL)
     else:
         print(text)
 
-# --- 测试函数 ---
 def run_single_test_parallel_subdir(test_index, test_config, base_path, results_path):
     status_code = "UNKNOWN"; performance_data = None; validation_errors = []
     stdout_lines = []; stderr_output = ""; real_time_taken = 0; java_exit_code = -1
@@ -52,7 +45,7 @@ def run_single_test_parallel_subdir(test_index, test_config, base_path, results_
     timeout_seconds = TIMEOUT_SECONDS_MUTUAL if test_type == 'mutual' else TIMEOUT_SECONDS_PUBLIC
     timed_out = False
     test_subdir_path = base_path / f"{TEST_SUBDIR_PREFIX}{test_index}_{test_type}"
-    final_status = "UNKNOWN" # 初始化 final_status
+    final_status = "UNKNOWN"
 
     try:
         test_subdir_path.mkdir(exist_ok=True)
@@ -81,7 +74,7 @@ def run_single_test_parallel_subdir(test_index, test_config, base_path, results_
         print(f"[测试 {test_index} ({test_type})] 执行程序 (超时: {timeout_seconds}s)...")
         start_time = time.time()
         process = None
-        stdout = None # 初始化 stdout 和 stderr
+        stdout = None
         stderr = None
         try:
             process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -104,29 +97,23 @@ def run_single_test_parallel_subdir(test_index, test_config, base_path, results_
             real_time_taken = end_time - start_time
             print_color(f"[测试 {test_index} ({test_type})] 错误: 进程超时 {timeout_seconds}s.", Fore.RED)
             timed_out = True
-            status_code = "EXECUTION_TIMED_OUT" # 初始超时状态
+            status_code = "EXECUTION_TIMED_OUT"
             if process:
                 process.kill()
-                # --- 修正: 捕获 communicate(timeout=1) 的超时 ---
-                stdout_after_kill = None # 使用不同的变量名
+                stdout_after_kill = None
                 stderr_after_kill = None
                 try:
                     stdout_after_kill, stderr_after_kill = process.communicate(timeout=1)
                 except subprocess.TimeoutExpired:
                     print_color(f"  [T{test_index}] 信息: 获取残余输出超时 (1s)，可能进程未能完全终止。", Fore.CYAN)
-                    # 保留 kill 之前的 stderr (如果存在)
-                    # stdout_lines 保持 kill 之前的状态 (不完整)
                 except Exception as e_comm_kill:
                     print_color(f"  [T{test_index}] 警告: kill 后 communicate 出错: {e_comm_kill}", Fore.YELLOW)
                     stderr_output += f"\n--- Error in communicate after kill: {e_comm_kill} ---"
 
-                # 如果成功获取到 kill 后的输出，更新变量 (虽然通常是空的或部分)
                 if stdout_after_kill is not None:
-                     stdout_lines = stdout_after_kill.splitlines() # 覆盖掉超时前的部分输出？也许不该覆盖
-                     # 保留超时前的 stdout_lines 可能更有用
+                     stdout_lines = stdout_after_kill.splitlines()
                 if stderr_after_kill is not None:
-                     stderr_output = stderr_after_kill # 使用 kill 后的 stderr
-                # --- 修正结束 ---
+                     stderr_output = stderr_after_kill
         except Exception as e_exec:
             end_time = time.time()
             real_time_taken = end_time - start_time
@@ -136,7 +123,6 @@ def run_single_test_parallel_subdir(test_index, test_config, base_path, results_
             status_code = "FAIL_RUNTIME"
             stderr_output += f"\n--- Python 执行错误 ---\n{e_exec}"
 
-        # --- 第一次验证 ---
         validation_success = False
         first_validation_errors = []
         if status_code != "FAIL_STDERR_OUTPUT":
@@ -155,9 +141,8 @@ def run_single_test_parallel_subdir(test_index, test_config, base_path, results_
             validation_errors = ["Stderr 非空，跳过验证。"]
             first_validation_errors = validation_errors[:]
 
-        # --- 判断初步状态 ---
         initial_status = "UNKNOWN"
-        if status_code == "EXECUTION_TIMED_OUT": # 检查我们自己设置的超时状态码
+        if status_code == "EXECUTION_TIMED_OUT":
             initial_status = "FAIL_TIMEOUT"
         elif validation_success and status_code == "EXECUTION_COMPLETE":
             initial_status = "PASS"
@@ -169,9 +154,8 @@ def run_single_test_parallel_subdir(test_index, test_config, base_path, results_
             else:
                 initial_status = "FAIL_UNKNOWN"
 
-        # --- 计算性能 ---
         performance_data = None
-        final_status = initial_status # 最终状态默认为初步状态
+        final_status = initial_status
 
         if initial_status == "PASS" and not timed_out:
             print(f"[测试 {test_index} ({test_type})] 重新验证以计算性能...")
@@ -197,10 +181,8 @@ def run_single_test_parallel_subdir(test_index, test_config, base_path, results_
                 final_status = "FAIL_PERF_CALC_ERROR"
                 validation_errors.append(f"计算性能时出错: {e_perf}\n{traceback.format_exc()}")
 
-        # --- 打印最终结果 ---
         print_color(f"[测试 {test_index} ({test_type})] 最终结果: {final_status}", Fore.GREEN if final_status == "PASS" else Fore.RED)
 
-        # --- 保存失败日志 ---
         if final_status != "PASS":
              failed_data_filename = results_path / f"failed_data_{test_index}_{test_type}.txt"
              failed_stdout_filename = results_path / f"failed_stdout_{test_index}_{test_type}.txt"
@@ -230,12 +212,9 @@ def run_single_test_parallel_subdir(test_index, test_config, base_path, results_
             if test_subdir_path.exists(): shutil.rmtree(test_subdir_path)
         except Exception as e_clean: print_color(f"[测试 {test_index}] 警告: 清理子目录失败: {e_clean}", Fore.YELLOW)
 
-    # 确保返回字典包含 final_status
     return {"index": test_index, "type": test_type, "status": final_status, "performance": performance_data,
             "errors": validation_errors, "stderr": stderr_output, "real_time_taken": real_time_taken}
 
-
-# --- 主执行逻辑 (适配 HW7) ---
 if __name__ == "__main__":
     test_mode_choice = ""; test_mode = ""
     while test_mode_choice not in ['1', '2']:
@@ -268,7 +247,6 @@ if __name__ == "__main__":
 
     overall_start_time = time.time(); all_results = []; tests_completed_count = 0
 
-    # --- 配置测试用例 ---
     test_configs_to_run = []
     print(f"\n准备 {total_test_cases} 个 {test_mode.capitalize()} HW7 测试配置...")
     for i in range(total_test_cases):
@@ -278,7 +256,7 @@ if __name__ == "__main__":
             config['sche_reqs'] = random.randint(3, MAX_SCHE_REQUESTS_PUBLIC)
             config['update_reqs'] = random.choice([2, 3])
             config['update_reqs'] = min(config['update_reqs'], MAX_UPDATE_REQUESTS)
-        else: # mutual
+        else:
             p_req = random.randint(50, 65)
             u_req = random.randint(1, min(MAX_UPDATE_REQUESTS, 3))
             s_req = min(random.randint(1, 3), MAX_TOTAL_REQUESTS_MUTUAL - p_req - u_req, ELEVATOR_COUNT - u_req*2)
@@ -290,7 +268,6 @@ if __name__ == "__main__":
     total_tests_to_run = len(test_configs_to_run)
     print(f"\n开始 {total_tests_to_run} 个 {test_mode.capitalize()} HW7 测试 (批次大小: {MAX_WORKERS})...")
 
-    # --- 运行测试批次 ---
     while tests_completed_count < total_tests_to_run:
         current_batch_start_index = tests_completed_count + 1; num_tests_in_batch = min(MAX_WORKERS, total_tests_to_run - tests_completed_count)
         current_batch_end_index = current_batch_start_index + num_tests_in_batch - 1; print(f"\n--- 运行批次: 测试 {current_batch_start_index} 到 {current_batch_end_index} ({test_mode.capitalize()} HW7) ---")
@@ -313,7 +290,6 @@ if __name__ == "__main__":
     overall_end_time = time.time()
     print(f"\n所有 {total_tests_to_run} 个测试完成。总执行时间: {overall_end_time - overall_start_time:.2f} 秒。")
 
-    # --- 最终总结 ---
     total_passed_count = 0; total_failed_tests_summary = []
     all_results.sort(key=lambda x: x.get("index", float('inf')))
     for result in all_results:

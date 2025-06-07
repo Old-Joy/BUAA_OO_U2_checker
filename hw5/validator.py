@@ -1,23 +1,19 @@
-# validator.py
 import re
-import math
-from collections import defaultdict, deque
+
 
 # --- Constants ---
 MOVE_TIME = 0.4
 DOOR_TIME = 0.4
 EPSILON = 0.001 # Tolerance for float comparisons
-MAX_CAPACITY = 6 # <--- 电梯最大容量常量
+MAX_CAPACITY = 6
 FLOOR_MIN = -4
 FLOOR_MAX = 7
 VALID_FLOORS_SET = set(range(-4, 0)) | set(range(1, 8))
 
-# --- State Enums/Constants ---
+
 DOOR_CLOSED = 0
 DOOR_OPEN = 1
-# (可选的中间状态，当前未使用)
-# DOOR_OPENING = 2
-# DOOR_CLOSING = 3
+
 
 PASSENGER_WAITING = 0
 PASSENGER_INSIDE = 1
@@ -53,7 +49,7 @@ def floor_to_str(floor):
     except (ValueError, TypeError):
         return f"InvalidFloor({floor})" # Handle non-numeric input
 
-# --- State Classes ---
+
 class PassengerState:
     def __init__(self, id, priority, from_fl, to_fl, assigned_el, req_time):
         self.id = id
@@ -63,9 +59,9 @@ class PassengerState:
         self.assigned_elevator = assigned_el
         self.request_time = req_time
         self.finish_time = -1.0
-        self.current_location = from_fl # Initial location
+        self.current_location = from_fl
         self.state = PASSENGER_WAITING
-        self.current_elevator = -1 # Elevator ID if inside
+        self.current_elevator = -1
 
     def __repr__(self):
         loc_str = floor_to_str(self.current_location) if self.state != PASSENGER_INSIDE else "Inside"
@@ -76,11 +72,11 @@ class PassengerState:
 class ElevatorState:
     def __init__(self, id):
         self.id = id
-        self.current_floor = 1 # Start at F1
+        self.current_floor = 1
         self.door_state = DOOR_CLOSED
-        self.passengers = set() # Set of passenger IDs inside
+        self.passengers = set()
         self.last_event_time = 0.0
-        self.last_action_finish_time = 0.0 # Tracks when movement/door actions *complete*
+        self.last_action_finish_time = 0.0
 
     @property
     def passenger_count(self):
@@ -92,7 +88,7 @@ class ElevatorState:
         return (f"E(id={self.id}, fl={fl_str}, door={door_map.get(self.door_state,'UNKNOWN')}, "
                 f"num={self.passenger_count}, last_t={self.last_event_time:.4f})")
 
-# --- Validator Class ---
+
 class OutputValidator:
     def __init__(self, stdin_file):
         self.errors = []
@@ -115,7 +111,7 @@ class OutputValidator:
              self.errors.append(full_message)
 
     def parse_stdin(self, filename):
-        # ... (保持不变) ...
+
         try:
             with open(filename, 'r') as f:
                 for line_num, line in enumerate(f, 1):
@@ -154,7 +150,6 @@ class OutputValidator:
 
 
     def parse_output_line(self, line):
-        # ... (保持不变, 使用上一版本修正后的代码) ...
         line = line.strip()
         if not line: return None
         timestamp_pattern = r"\[\s*(\d+\.\d+)\s*\]" # Allows space, multiple decimal places
@@ -227,9 +222,8 @@ class OutputValidator:
              return False
 
         elevator = self.elevators[el_id]
-        elevator.last_event_time = ev_time # 更新最后事件时间戳
+        elevator.last_event_time = ev_time
 
-        # 使用 door_map 辅助打印门状态
         door_map = {DOOR_CLOSED: "CLOSED", DOOR_OPEN: "OPEN"}
         current_door_state_str = door_map.get(elevator.door_state, 'UNKNOWN')
 
@@ -237,12 +231,10 @@ class OutputValidator:
             if ev_type == "ARRIVE":
                 self.power_arrive += 1
                 floor = event["floor"]
-                # 检查：移动时门必须关闭
+
                 if elevator.door_state == DOOR_OPEN:
                     self.add_error(f"Elevator {el_id} ARRIVE at {floor_to_str(floor)} while doors were OPEN", ev_time)
-                    # 即使违规，也更新状态以反映日志
 
-                # --- 时间和楼层检查 (保持不变) ---
                 expected_arrival_time = elevator.last_action_finish_time + MOVE_TIME
                 timing_epsilon = EPSILON * 10
                 if ev_time < expected_arrival_time - timing_epsilon:
@@ -257,7 +249,6 @@ class OutputValidator:
                      if floor != elevator.current_floor:
                           self.add_error(f"Elevator {el_id} invalid move: {floor_to_str(elevator.current_floor)} -> {floor_to_str(floor)}", ev_time)
 
-                # --- 状态更新 ---
                 elevator.current_floor = floor
                 elevator.last_action_finish_time = ev_time
                 return True
@@ -265,23 +256,19 @@ class OutputValidator:
             elif ev_type == "OPEN":
                 self.power_open += 1
                 floor = event["floor"]
-                # ======> 新增/修改检查：只有在关门状态下才能开门 <======
+
                 if elevator.door_state != DOOR_CLOSED:
                      self.add_error(f"Elevator {el_id} tried to OPEN but was not in CLOSED state (current state: {current_door_state_str})", ev_time)
-                     # 即使违规，也根据日志更新状态？或者阻止状态更新？先记录错误并更新
 
-                # --- 其他检查 (保持不变) ---
                 if floor != elevator.current_floor:
                     self.add_error(f"Elevator {el_id} OPEN at wrong floor {floor_to_str(floor)}, current is {floor_to_str(elevator.current_floor)}", ev_time)
-                # (这个检查现在被上面的 ! = DOOR_CLOSED 包含了)
-                # if elevator.door_state == DOOR_OPEN:
-                #      self.add_error(f"Elevator {el_id} OPEN called while already OPEN", ev_time)
+
                 timing_epsilon = EPSILON * 10
                 if ev_time < elevator.last_action_finish_time - timing_epsilon:
                      self.add_error(f"Elevator {el_id} OPEN too early. Time: {ev_time:.4f}, "
                                     f"Previous action finished at {elevator.last_action_finish_time:.4f}", ev_time)
 
-                # --- 状态更新 ---
+
                 elevator.door_state = DOOR_OPEN
                 elevator.last_action_finish_time = ev_time
                 return True
@@ -289,12 +276,9 @@ class OutputValidator:
             elif ev_type == "CLOSE":
                 self.power_close += 1
                 floor = event["floor"]
-                # ======> 确认检查：只有在开门状态下才能关门 <======
                 if elevator.door_state != DOOR_OPEN:
                      self.add_error(f"Elevator {el_id} tried to CLOSE but was not in OPEN state (current state: {current_door_state_str})", ev_time)
-                     # 即使违规，也根据日志更新状态
 
-                # --- 其他检查 (保持不变) ---
                 if floor != elevator.current_floor:
                     self.add_error(f"Elevator {el_id} CLOSE at wrong floor {floor_to_str(floor)}, current is {floor_to_str(elevator.current_floor)}", ev_time)
 
@@ -313,7 +297,6 @@ class OutputValidator:
                 if duration >= 0 and duration < DOOR_TIME - timing_epsilon:
                      self.add_error(f"Elevator {el_id} door open duration too short: {duration:.4f}s (< {DOOR_TIME}s), Open time: {open_start_time:.4f}, Close time: {ev_time:.4f}", ev_time)
 
-                # --- 状态更新 ---
                 elevator.door_state = DOOR_CLOSED
                 elevator.last_action_finish_time = ev_time
                 return True
@@ -327,15 +310,12 @@ class OutputValidator:
 
                 passenger = self.passengers[person_id]
 
-                # ======> 确认检查：乘客只有在开门状态下才能进电梯 <======
                 if elevator.door_state != DOOR_OPEN:
                     self.add_error(f"Passenger {person_id} tried to IN Elevator {el_id} while doors were not OPEN (state: {current_door_state_str})", ev_time)
 
-                # ======> 新增检查：电梯内最多只能有6个人 (实时检测) <======
                 if elevator.passenger_count >= MAX_CAPACITY:
                      self.add_error(f"Elevator {el_id} exceeds capacity ({MAX_CAPACITY}) trying to let IN {person_id} ({elevator.passenger_count} already inside)", ev_time)
-                     # 注意：即使超载，也可能需要根据日志更新状态，取决于严格程度
-                     # 这里我们先记录错误，然后继续更新状态以反映日志
+
 
                 # --- 其他检查 (保持不变) ---
                 if floor != elevator.current_floor:
@@ -348,14 +328,10 @@ class OutputValidator:
                 if el_id != passenger.assigned_elevator:
                      self.add_error(f"Passenger {person_id} IN wrong Elevator {el_id}, assigned to {passenger.assigned_elevator}", ev_time)
 
-                # --- 状态更新 ---
-                # 即使有错误，也根据日志更新状态，因为日志声称发生了这件事
                 passenger.state = PASSENGER_INSIDE
                 passenger.current_elevator = el_id
                 passenger.current_location = -999
-                # 只有在未超载且乘客不在电梯内时才添加 (防止因状态错误重复添加)
-                # 但如果日志说IN了，即使超载，也可能需要模拟加入状态？这取决于验证的严格性
-                # 方案：记录错误，但总是尝试根据日志更新（如果验证器目标是忠实反映日志并指出矛盾）
+
                 if person_id not in elevator.passengers:
                      elevator.passengers.add(person_id)
                 # else: # 如果乘客已在电梯内但又IN，这也是个错误
@@ -372,18 +348,14 @@ class OutputValidator:
 
                 passenger = self.passengers[person_id]
 
-                # ======> 确认检查：乘客只有在开门状态下才能出电梯 <======
                 if elevator.door_state != DOOR_OPEN:
                     self.add_error(f"Passenger {person_id} tried to OUT Elevator {el_id} while doors were not OPEN (state: {current_door_state_str})", ev_time)
 
-                # --- 其他检查 (保持不变) ---
                 if floor != elevator.current_floor:
                     self.add_error(f"Passenger {person_id} OUT Elevator {el_id} at wrong floor {floor_to_str(floor)}, elevator is at {floor_to_str(elevator.current_floor)}", ev_time)
                 if passenger.state != PASSENGER_INSIDE or passenger.current_elevator != el_id:
                      self.add_error(f"Passenger {person_id} OUT Elevator {el_id} but was not recorded as INSIDE this elevator (state={passenger.state}, current_el={passenger.current_elevator})", ev_time)
-                     # 如果乘客状态不对，后续移除可能会失败或不准确
 
-                # --- 状态更新 ---
                 passenger.current_elevator = -1
                 passenger.current_location = floor
                 if person_id in elevator.passengers:
@@ -450,27 +422,19 @@ class OutputValidator:
 
         parsing_errors = []
         parsed_events_raw = []
-        initial_error_count = len(self.errors) # Track errors before parsing
+        initial_error_count = len(self.errors)
         for line in output_lines:
             event = self.parse_output_line(line)
-            # Collect only new errors added by parser
             parsing_errors.extend(self.errors[initial_error_count + len(parsing_errors):])
             if event:
                 parsed_events_raw.append(event)
-
         if parsing_errors:
              print("Errors found during output parsing:")
              for err in parsing_errors: print(f"  - {err}")
-
-
         validation_error_count_before = len(self.errors)
         for event in parsed_events_raw:
              if self.validate_event(event):
-                  # Only add successfully processed (logic-wise) events to history for state tracking
                   self.events.append(event)
-             # validate_event adds errors to self.errors directly
-
-        # --- Final State Checks ---
         print("\n--- Final State Check ---")
         final_check_errors = []
         all_passengers_arrived = True
@@ -492,12 +456,9 @@ class OutputValidator:
                 print("Passenger Check: OK - All passengers reached their destinations.")
             else:
                  print("Passenger Check: FAILED")
-
-
         elevators_ok = True
         for eid, el in self.elevators.items():
             if el.passenger_count > 0:
-                # Format passenger IDs nicely if possible
                 p_ids = ", ".join(map(str, sorted(list(el.passengers))))
                 error_msg = f"Elevator {eid} finished with {el.passenger_count} passengers inside: [{p_ids}]"
                 final_check_errors.append(error_msg)
@@ -512,16 +473,11 @@ class OutputValidator:
              print("Elevator Check: OK - All elevators empty and doors closed.")
         else:
              print("Elevator Check: FAILED")
-
-        # Add final check errors to the main error list, prefixed
         self.errors.extend([f"Final State Error: {msg}" for msg in final_check_errors])
-
-        # Return True only if NO errors were found throughout the entire process
         return not self.errors
 
 
     def calculate_performance(self, real_time):
-        # ... (保持不变) ...
         t_run = max(real_time, self.total_runtime)
         total_weighted_time = 0
         total_weight = 0

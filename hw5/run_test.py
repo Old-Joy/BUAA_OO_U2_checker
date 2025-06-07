@@ -1,4 +1,3 @@
-# run_test.py
 import subprocess
 import time
 import os
@@ -7,9 +6,7 @@ import random
 import shutil
 import concurrent.futures
 import pathlib
-# ======> 修改：导入新的函数名 <======
 from generate_data import generate_requests_phased
-# ======> 修改结束 <======
 from validator import OutputValidator
 try:
     from colorama import init, Fore, Style
@@ -23,7 +20,7 @@ except ImportError:
     Fore = DummyStyle(); Style = DummyStyle()
     USE_COLOR = False
 
-# --- Configuration ---
+
 BASE_DIR = pathlib.Path(__file__).parent.resolve()
 DATAPUT_EXE = BASE_DIR / "datainput_student_win64.exe"
 JAVA_COMMAND = "java"
@@ -36,12 +33,12 @@ MAX_WORKERS = 10 # 每次并行运行 10 个
 TEST_SUBDIR_PREFIX = "test_run_"
 RESULTS_DIR_NAME = "test_results"
 
-# --- Helper ---
+
 def print_color(text, color):
     if USE_COLOR: print(color + text + Style.RESET_ALL)
     else: print(text)
 
-# --- Test Function for Parallel Execution in Subdirs ---
+
 def run_single_test_parallel_subdir(test_index, num_requests, base_path, results_path):
     """在 base_path 下的独立子目录中运行单个测试。"""
     status_code = "UNKNOWN"
@@ -65,9 +62,9 @@ def run_single_test_parallel_subdir(test_index, num_requests, base_path, results
 
         local_stdin_path = test_subdir_path / STDIN_FILENAME
         print(f"[Test {test_index}] Generating data ({num_requests} reqs) into {local_stdin_path}...")
-        # ======> 修改：调用新的函数名 <======
+
         if not generate_requests_phased(num_requests=num_requests, filename=local_stdin_path):
-        # ======> 修改结束 <======
+
             status_code = "FAIL_GENERATE"; raise RuntimeError("Data generation failed.")
 
         classpath_sep = ";" if os.name == 'nt' else ":"
@@ -91,7 +88,7 @@ def run_single_test_parallel_subdir(test_index, num_requests, base_path, results
             end_time = time.time(); real_time_taken = end_time - start_time
             print_color(f"[Test {test_index}] Error: Process timed out after {TIMEOUT_SECONDS}s.", Fore.RED)
             status_code = "FAIL_TIMEOUT"
-            if process: process.kill(); # ... (get output) ...
+            if process: process.kill();
         except Exception as e_exec:
             end_time = time.time(); real_time_taken = end_time - start_time
             print_color(f"[Test {test_index}] Error during execution: {e_exec}", Fore.RED)
@@ -149,7 +146,7 @@ def run_single_test_parallel_subdir(test_index, num_requests, base_path, results
             "errors": validation_errors, "stderr": stderr_output, "real_time_taken": real_time_taken}
 
 
-# --- Main Execution Logic ---
+
 if __name__ == "__main__":
     while True:
         try:
@@ -218,7 +215,7 @@ if __name__ == "__main__":
     overall_end_time = time.time()
     print(f"\nAll {total_test_cases} tests finished. Total execution time: {overall_end_time - overall_start_time:.2f} seconds.")
 
-    # ... (最终总结打印逻辑保持不变) ...
+
     all_results.sort(key=lambda x: x.get("index", float('inf')) if isinstance(x.get("index"), int) else float('inf'))
     for result in all_results:
         if result.get('status') == "PASS": total_passed_count += 1
@@ -237,5 +234,4 @@ if __name__ == "__main__":
             print_color(f"  Test Case {failure['index']}: {reason_str}", Fore.RED)
             print(f"      Input:  {RESULTS_DIR_NAME}\\failed_data_{failure['index']}.txt")
             print(f"      Output: {RESULTS_DIR_NAME}\\failed_stdout_{failure['index']}.txt")
-            # ... (打印关键错误摘要) ...
     print("="*56)

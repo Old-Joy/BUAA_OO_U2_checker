@@ -1,4 +1,3 @@
-# run_test.py (v8 - Handle Timeout without stopping validation)
 import subprocess
 import time
 import os
@@ -24,7 +23,7 @@ except ImportError:
         def __getattr__(self, name): return ""
     Fore = DummyStyle(); Style = DummyStyle(); USE_COLOR = False
 
-# --- Configuration ---
+
 BASE_DIR = pathlib.Path(__file__).parent.resolve()
 DATAPUT_EXE = BASE_DIR / "datainput_student_win64.exe"
 JAVA_COMMAND = "java"
@@ -38,18 +37,15 @@ MAX_WORKERS = 10
 TEST_SUBDIR_PREFIX = "test_run_"
 RESULTS_DIR_NAME = "test_results_hw6"
 
-# --- Helper ---
 def print_color(text, color):
     if USE_COLOR: print(color + text + Style.RESET_ALL)
     else: print(text)
 
-# --- Test Function ---
 def run_single_test_parallel_subdir(test_index, test_config, base_path, results_path):
     status_code = "UNKNOWN"; performance_data = None; validation_errors = []
     stdout_lines = []; stderr_output = ""; real_time_taken = 0; java_exit_code = -1
     test_type = test_config['type']
     timeout_seconds = TIMEOUT_SECONDS_MUTUAL if test_type == 'mutual' else TIMEOUT_SECONDS_PUBLIC
-    # --- 新增: 超时标志 ---
     timed_out = False
 
     test_subdir_path = base_path / f"{TEST_SUBDIR_PREFIX}{test_index}_{test_type}"
@@ -98,32 +94,26 @@ def run_single_test_parallel_subdir(test_index, test_config, base_path, results_
         except subprocess.TimeoutExpired:
             end_time = time.time(); real_time_taken = end_time - start_time
             print_color(f"[Test {test_index} ({test_type})] Error: Process timed out after {timeout_seconds}s.", Fore.RED)
-            # --- 修改: 记录超时，但不立即失败 ---
             timed_out = True
-            status_code = "EXECUTION_TIMED_OUT" # 用一个临时的状态码
+            status_code = "EXECUTION_TIMED_OUT"
             if process:
                 process.kill()
                 try:
-                    # 尝试获取超时前的输出
-                    stdout, stderr = process.communicate(timeout=1) # 短暂等待获取残余输出
+                    stdout, stderr = process.communicate(timeout=1)
                     stdout_lines = stdout.splitlines() if stdout else []
                     stderr_output = stderr if stderr else ""
                 except Exception as e_comm_timeout:
-                     # 如果获取输出也超时或失败，记录下来
                      stderr_output += f"\n--- Error getting output after timeout kill: {e_comm_timeout} ---"
-            # --- 修改结束 ---
 
         except Exception as e_exec:
-            # ... (保持不变) ...
             end_time = time.time(); real_time_taken = end_time - start_time
             print_color(f"[Test {test_index} ({test_type})] Error during execution: {e_exec}", Fore.RED)
             if process: process.kill()
             status_code = "FAIL_RUNTIME"; stderr_output += f"\n--- Python Execution Error ---\n{e_exec}"
 
 
-        # --- 验证步骤照常进行 (即使可能超时) ---
         validation_success = False
-        if status_code != "FAIL_STDERR_OUTPUT": # 只有在stderr干净时才验证
+        if status_code != "FAIL_STDERR_OUTPUT":
             print(f"[Test {test_index} ({test_type})] Validating output (Timed Out: {timed_out})...")
             try:
                 validator = OutputValidator(local_stdin_path)
@@ -140,20 +130,18 @@ def run_single_test_parallel_subdir(test_index, test_config, base_path, results_
         # --- 最终状态判断 (优先考虑超时) ---
         final_status = "UNKNOWN"
         if timed_out:
-            final_status = "FAIL_TIMEOUT" # 超时是最终的失败原因
+            final_status = "FAIL_TIMEOUT"
             print_color(f"[Test {test_index} ({test_type})] Failed! Reason: {final_status} (Validation ran on partial output)", Fore.RED)
         elif validation_success and status_code == "EXECUTION_COMPLETE":
             final_status = "PASS"
             performance_data = validator.calculate_performance(real_time_taken)
             print_color(f"[Test {test_index} ({test_type})] Passed.", Fore.GREEN)
         else:
-            # 如果没超时，按原来的逻辑判断失败原因
             if status_code.startswith("FAIL"): final_status = status_code
             elif not validation_success: final_status = "FAIL_VALIDATE"
             else: final_status = "FAIL_UNKNOWN" # Should not happen normally
             print_color(f"[Test {test_index} ({test_type})] Failed! Reason: {final_status}", Fore.RED)
 
-        # --- 保存失败日志 (如果最终状态不是 PASS) ---
         if final_status != "PASS":
             failed_data_filename = results_path / f"failed_data_{test_index}_{test_type}.txt"
             failed_stdout_filename = results_path / f"failed_stdout_{test_index}_{test_type}.txt"
@@ -195,9 +183,8 @@ def run_single_test_parallel_subdir(test_index, test_config, base_path, results_
             "errors": validation_errors, "stderr": stderr_output, "real_time_taken": real_time_taken}
 
 
-# --- Main Execution Logic ---
+
 if __name__ == "__main__":
-    # (模式选择和测试数量获取逻辑不变)
     test_mode_choice = ""; test_mode = ""
     while test_mode_choice not in ['1', '2']:
         test_mode_choice = input("请选择测试模式 (输入数字):\n  1: 公测 (Public) 模式\n  2: 互测 (Mutual) 模式\n选择: ")
@@ -228,14 +215,14 @@ if __name__ == "__main__":
             try: shutil.rmtree(item)
             except Exception as e_clean_old: print_color(f"  Warning: 无法移除旧目录 {item.name}: {e_clean_old}", Fore.YELLOW)
 
-    # 检查必要文件
+
     essential_files = [DATAPUT_EXE, JAR_FILE, OFFICIAL_JAR_FILE]
     if not all(f.exists() for f in essential_files):
         print_color(f"错误: 缺少必要文件 (datainput, {JAR_FILE.name}, {OFFICIAL_JAR_FILE.name}). 中止测试。", Fore.RED); sys.exit(1)
 
     overall_start_time = time.time(); all_results = []; tests_completed_count = 0
 
-    # 配置测试参数
+
     test_configs_to_run = []
     print(f"\n准备 {total_test_cases} 个 {test_mode.capitalize()} 测试配置...")
     for i in range(total_test_cases):
@@ -292,7 +279,6 @@ if __name__ == "__main__":
     overall_end_time = time.time()
     print(f"\n所有 {total_tests_to_run} 个测试完成。总执行时间: {overall_end_time - overall_start_time:.2f} 秒。")
 
-    # --- Final Summary ---
     total_passed_count = 0; total_failed_tests_summary = []
     all_results.sort(key=lambda x: x.get("index", float('inf')))
     for result in all_results:
@@ -319,7 +305,6 @@ if __name__ == "__main__":
              print(f"      输入:  {results_dir_path.name}{os.sep}failed_data_{idx}_{ftype}.txt")
              print(f"      输出/日志: {results_dir_path.name}{os.sep}failed_stdout_{idx}_{ftype}.txt")
              errors = failure.get("errors", [])
-             # Display relevant error snippet
              if code == "FAIL_TIMEOUT": print(f"      超时时间: {TIMEOUT_SECONDS_MUTUAL if ftype=='mutual' else TIMEOUT_SECONDS_PUBLIC}s")
              elif code in ["FAIL_WRAPPER_ERROR", "FAIL_FUTURE_ERROR"]:
                   tb_lines = [line for line in errors if "Traceback" in line]

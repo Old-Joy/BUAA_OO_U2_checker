@@ -1,17 +1,11 @@
-# generate_data.py (Corrected v8 - Added Defensive Checks for SCHE Timing)
 import random
-import time
-import math
-import bisect
 import re
 
-# --- Constants ---
 FLOOR_MIN = -4
 FLOOR_MAX = 7
 VALID_FLOORS = list(range(FLOOR_MIN, 0)) + list(range(1, FLOOR_MAX + 1))
 ELEVATOR_COUNT = 6
 
-# HW6 Specific Config
 MAX_TIME_DEFAULT = 60.0
 MAX_TIME_MUTUAL = 50.0
 SCHE_TARGET_FLOORS = [-2, -1, 1, 2, 3, 4, 5]
@@ -19,7 +13,6 @@ SCHE_SPEEDS_CORRECT = [0.2, 0.3, 0.4, 0.5]
 MAX_SCHE_REQUESTS_PUBLIC = 20
 MAX_SCHE_PER_ELEVATOR_MUTUAL = 1
 MAX_TOTAL_REQUESTS_MUTUAL = 70
-# --- Ensure this constant is defined and spelled correctly ---
 MIN_SCHE_INTERVAL_ESTIMATE = 15.0
 
 def floor_to_str(floor):
@@ -33,7 +26,6 @@ def generate_requests_phased_hw6(
     filename="stdin.txt",
     is_mutual_test=False
 ):
-    # --- Apply Mutual Test Constraints ---
     if is_mutual_test:
         max_time = MAX_TIME_MUTUAL
         total_requests_target = num_passenger_requests + num_sche_requests
@@ -49,7 +41,6 @@ def generate_requests_phased_hw6(
         num_passenger_requests = max(1, min(num_passenger_requests, 100))
         num_sche_requests = min(num_sche_requests, MAX_SCHE_REQUESTS_PUBLIC)
 
-    # --- ID and Counters ---
     person_ids = random.sample(range(1, 10001 + num_passenger_requests), num_passenger_requests)
     person_id_index = 0
     sche_request_counts = {i: 0 for i in range(1, ELEVATOR_COUNT + 1)}
@@ -57,7 +48,6 @@ def generate_requests_phased_hw6(
     passenger_reqs_generated = 0
     last_sche_time_for_elevator = {i: 0.0 for i in range(1, ELEVATOR_COUNT + 1)}
 
-    # --- Time Phasing ---
     ph1_end = max_time * 0.15; ph2_end = max_time * 0.50
     ph3_end = max_time * 0.75; ph4_end = max_time
     ratios = [0.10, 0.40, 0.20, 0.30]
@@ -98,7 +88,6 @@ def generate_requests_phased_hw6(
                 if person_id_index >= len(person_ids): break
                 pid = person_ids[person_id_index]; person_id_index += 1
                 from_floor, to_floor, priority = -99, -99, -1
-                # ... (Generation logic based on phase_type remains the same as v7) ...
                 if phase_type == 'sparse_sche': from_floor=random.choice(VALID_FLOORS); to_floor=random.choice(list(set(VALID_FLOORS)-{from_floor})); priority=random.randint(1, 40)
                 elif phase_type == 'dense_sche': from_floor=random.choice(VALID_FLOORS); to_floor=random.choice(list(set(VALID_FLOORS)-{from_floor})); priority=random.randint(30, 70)
                 elif phase_type == 'boundary_sche':
@@ -132,11 +121,9 @@ def generate_requests_phased_hw6(
                 valid_schedule_elevators = []
                 for eid in possible_elevators:
                     if is_mutual_test and sche_request_counts[eid] >= MAX_SCHE_PER_ELEVATOR_MUTUAL: continue
-                    # --- Added Defensive Check ---
                     if eid not in last_sche_time_for_elevator:
                         print(f"CRITICAL ERROR: Invalid eid {eid} accessed in last_sche_time_for_elevator!")
                         continue
-                    # --- End Defensive Check ---
                     if request_time < last_sche_time_for_elevator[eid] + MIN_SCHE_INTERVAL_ESTIMATE: continue
                     valid_schedule_elevators.append(eid)
 
@@ -158,7 +145,6 @@ def generate_requests_phased_hw6(
         remaining_s = num_sche_requests - sche_requests_generated
         if remaining_p <= 0 and remaining_s <= 0: break
 
-    # Post-processing
     phase_requests_temp.sort(key=lambda x: x[0])
     final_requests_output = []; last_output_time_numeric = 0.0
     actual_passenger_reqs = 0; actual_sche_reqs = 0
@@ -172,13 +158,11 @@ def generate_requests_phased_hw6(
         if output_time_float >= max_time: continue
 
         reconstructed_str = None
-        # Passenger reconstruction (Added group check v5)
         match_passenger = re.match(r"\[.*?\](\d+)-PRI-(\d+)-FROM-([BF]\d+)-TO-([BF]\d+)", req_str_full)
         if match_passenger and len(match_passenger.groups()) == 4:
             pid, pri, from_s, to_s = match_passenger.groups()
             reconstructed_str = (f"[{output_time_float:.1f}]{pid}-PRI-{pri}-FROM-{from_s}-TO-{to_s}")
         else:
-            # SCHE reconstruction (Added group check v5)
             match_sche = re.match(r"\[.*?\]SCHE-(\d+)-(\d+\.\d+)-([BF]\d+)", req_str_full)
             if match_sche and len(match_sche.groups()) == 3:
                 el_id, spd_s, floor_s = match_sche.groups()
@@ -186,12 +170,10 @@ def generate_requests_phased_hw6(
                     speed_float = float(spd_s)
                     reconstructed_str = f"[{output_time_float:.1f}]SCHE-{el_id}-{speed_float:.1f}-{floor_s}"
                 except ValueError: print(f"Warning: Cannot parse speed '{spd_s}' in SCHE: {req_str_full}")
-            # else: No match or wrong groups, warning printed before if needed
 
         if reconstructed_str:
              final_requests_output.append(reconstructed_str)
              last_output_time_numeric = output_time_float
-        # else: print warning if needed (already handled implicitly)
 
     final_requests_count = len(final_requests_output)
 
